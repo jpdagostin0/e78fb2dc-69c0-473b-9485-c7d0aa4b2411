@@ -27,11 +27,6 @@ impl Track {
     pub fn has(&self, k: WeaponKind) -> bool {
         self.weapons.contains(&k)
     }
-    /// Attacked us lately, or is facing us.
-    pub fn hostile(&self, t: f64, me: V3, aim_tol: f64) -> bool {
-        let to_us = (me[1] - self.pos[1]).atan2(me[0] - self.pos[0]);
-        t - self.last_dmg_t < 6.0 || adiff(self.aim[0], to_us).abs() < aim_tol
-    }
     pub fn pos_at(&self, t: f64) -> V3 {
         let dt = (t - self.last_seen).clamp(0.0, 1.0);
         add(self.pos, scale([self.vel[0], self.vel[1], 0.0], dt))

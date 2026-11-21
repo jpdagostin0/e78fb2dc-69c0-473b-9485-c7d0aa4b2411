@@ -288,9 +288,6 @@ impl Brain {
             if d > p.engage_range && !attacker {
                 continue;
             }
-            if p.passive_aim > 0.0 && d > p.passive_near && !tr.hostile(t, pos, p.passive_aim) {
-                continue;
-            }
             if d > 60.0 {
                 if dist2v(tp, zi.cur_c) > zi.cur_r - 2.0 {
                     continue;
