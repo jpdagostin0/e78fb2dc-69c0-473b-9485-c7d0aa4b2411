@@ -239,7 +239,13 @@ impl Brain {
                 self.mem.ban(tr.id, t + 8.0);
             }
             let pref = self.pref_range(me, tr, hpf);
-            goal = if los { Goal::Range { pos: tp, pref } } else { Goal::Nav { pos: tp, arrive: (pref * 0.5).max(15.0) } };
+            goal = if los {
+                Goal::Range { pos: tp, pref }
+            } else if p.hold_unseen && tr.hp > me.hp * p.finish_ratio {
+                Goal::None
+            } else {
+                Goal::Nav { pos: tp, arrive: (pref * 0.5).max(15.0) }
+            };
         } else if let Some(l) = loot.as_ref() {
             mode = Mode::Loot;
             goal = Goal::Nav { pos: l.pos, arrive: 1.2 };
@@ -286,6 +292,9 @@ impl Brain {
                 continue;
             }
             if d > p.engage_range && !attacker {
+                continue;
+            }
+            if p.passive_aim > 0.0 && d > p.passive_near && !tr.hostile(t, pos, p.passive_aim) {
                 continue;
             }
             if d > 60.0 {

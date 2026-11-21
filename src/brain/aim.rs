@@ -99,6 +99,9 @@ impl Brain {
             let at = self.aim_target(tr);
             let c = up(at.feet, at.height * 0.5);
             let d = dist(c, muzzle);
+            if self.p.passive_aim > 0.0 && d > self.p.passive_near && !tr.hostile(t, me.pos, self.p.passive_aim) {
+                continue;
+            }
             let clear = world.ray(muzzle, c).is_none();
             let attacker = t - tr.last_dmg_t < 3.0;
             let mut s = -0.3 * d + 40.0 * (1.0 - frac(tr.hp, tr.max_hp));
