@@ -88,6 +88,7 @@ pub struct Brain {
     pub(crate) roof_step: Option<(i64, Option<V3>, f64)>,
     pub(crate) roof_first_t: f64,
     pub(crate) kills: u32,
+    pub(crate) nav_scale: f64,
     #[cfg(test)]
     pub(crate) dbg: String,
 }
@@ -148,6 +149,7 @@ impl Brain {
             roof_step: None,
             roof_first_t: -1.0,
             kills: 0,
+            nav_scale: 1.0,
             #[cfg(test)]
             dbg: String::new(),
         }
@@ -155,10 +157,25 @@ impl Brain {
 
     pub fn act(&mut self, obs: &Obs, budget: &Budget) -> Action {
         self.t_act = std::time::Instant::now();
+        // The server scales eye and muzzle with cubes but reports the base radius and height.
+        let mut scaled = obs.clone();
+        let k = 1.0 + self.cfg.cubes.size_per_cube * obs.me.cubes.max(0.0);
+        scaled.me.stats.radius = scaled.me.stats.radius.max(self.cfg.mech.radius * k);
+        scaled.me.stats.height = scaled.me.stats.height.max(self.cfg.mech.height * k);
+        let obs = &scaled;
         let mut act = Action::new(obs.tick);
         let shared = self.shared.clone();
         let world = &shared.world;
-        let nav = &shared.nav;
+        // smallest nav graph that fits our current size
+        let (nav_scale, nav) = match shared.big.iter().find(|(s, _)| *s + 1e-9 >= k).or(shared.big.last()) {
+            Some((s, n)) if k > 1.0 + 1e-9 => (*s, n),
+            _ => (1.0, &shared.nav),
+        };
+        if nav_scale != self.nav_scale {
+            self.nav_scale = nav_scale;
+            self.field = None;
+            self.zone_field = None;
+        }
         self.mem.update(obs, world, &self.cfg);
         if let Some(of) = &obs.offer {
             act.pick = Some(self.pick_upgrade(of));
