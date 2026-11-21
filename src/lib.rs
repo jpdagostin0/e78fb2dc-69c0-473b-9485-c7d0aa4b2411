@@ -33,7 +33,7 @@ impl Shared {
                 nav::Nav::build(&world::World::empty(), &cfg.mech)
             }
         };
-        Shared { world, nav }
+        Self { world, nav }
     }
 }
 

@@ -284,8 +284,8 @@ impl Default for Params {
                 "sensors",
                 "laser_pierce",
             ]
-            .iter()
-            .map(|s| s.to_string())
+            .into_iter()
+            .map(String::from)
             .collect(),
             hold_until: -1.0,
             halt_after: -1.0,

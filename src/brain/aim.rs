@@ -57,7 +57,7 @@ impl Brain {
                 _ => 0.0,
             };
             let pr = k * d - (t - s.t) * 0.3;
-            if k * d > 0.0 && best.map_or(true, |b| pr > b.0) {
+            if k * d > 0.0 && best.is_none_or(|b| pr > b.0) {
                 best = Some((pr, s.bearing));
             }
         }
@@ -117,7 +117,7 @@ impl Brain {
             let to_us = (me.pos[1] - tr.pos[1]).atan2(me.pos[0] - tr.pos[0]);
             let aligned = adiff(tr.aim[0], to_us).abs() < 0.5;
             let allow = self.mode != Mode::Retreat || attacker || (aligned && clear) || d < 60.0;
-            if best.as_ref().map_or(true, |b| s > b.0) {
+            if best.as_ref().is_none_or(|b| s > b.0) {
                 best = Some((s, at, allow));
             }
         }
@@ -136,7 +136,7 @@ impl Brain {
             }
             let d = dist(tr.pos, me.pos);
             let s = -d + if hunted { 50.0 } else { 0.0 };
-            if bn.as_ref().map_or(true, |b| s > b.0) {
+            if bn.as_ref().is_none_or(|b| s > b.0) {
                 bn = Some((s, self.aim_target(tr), self.mode != Mode::Retreat || attacker));
             }
         }
@@ -158,7 +158,7 @@ impl Brain {
                 continue;
             }
             let s = -d + if self.target == Tgt::Crate(it.id) { 60.0 } else { 0.0 };
-            if bc.as_ref().map_or(true, |b| s > b.0) && rays < 8 {
+            if bc.as_ref().is_none_or(|b| s > b.0) && rays < 8 {
                 rays += 1;
                 if world.ray(muzzle, c).is_none() {
                     let at = AimTarget { feet: it.pos, vel: [0.0; 3], acc: [0.0; 3], radius: self.cfg.crates.radius, height: self.cfg.crates.height, hp: it.hp, fixed: true };
@@ -263,7 +263,7 @@ impl Brain {
                 let tp = tr.pos_at(t);
                 let d = dist(tp, me.pos);
                 let s = d - if t - tr.last_dmg_t < 3.0 { 200.0 } else { 0.0 };
-                if t - tr.last_dmg_t < 3.0 && face.map_or(true, |f| s < f.0) {
+                if t - tr.last_dmg_t < 3.0 && face.is_none_or(|f| s < f.0) {
                     face = Some((s, tp));
                 }
             }
@@ -320,9 +320,9 @@ impl Brain {
         }
 
         let laser_w = laser.and_then(|i| me.weapons[i].as_ref().map(|w| (i, w)));
-        let laser_in = laser_w.map_or(false, |(_, w)| d <= w.stats.range * 0.98 && los);
-        let laser_charging = laser_w.map_or(false, |(_, w)| w.charge > 0.0);
-        let gun_ok = gun.map_or(false, |g| g.2);
+        let laser_in = laser_w.is_some_and(|(_, w)| d <= w.stats.range * 0.98 && los);
+        let laser_charging = laser_w.is_some_and(|(_, w)| w.charge > 0.0);
+        let gun_ok = gun.is_some_and(|g| g.2);
         let mut cmd = match gun {
             Some((_, a, _)) => a,
             None => direct,
@@ -340,7 +340,7 @@ impl Brain {
         let mut mortar_primary = false;
         if !laser_final {
             if let Some((i, a)) = mortar {
-                if me.weapons[i].as_ref().map_or(false, |w| w.cooldown <= 0.11) || !gun_ok {
+                if me.weapons[i].as_ref().is_some_and(|w| w.cooldown <= 0.11) || !gun_ok {
                     cmd = a;
                     mortar_primary = true;
                 }
@@ -348,7 +348,7 @@ impl Brain {
         }
         if !gun_ok && !mortar_primary && !laser_final {
             if let Some(i) = lightning {
-                if me.weapons[i].as_ref().map_or(false, |w| d <= w.stats.range * 1.3) {
+                if me.weapons[i].as_ref().is_some_and(|w| d <= w.stats.range * 1.3) {
                     cmd = direct;
                 }
             }

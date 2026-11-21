@@ -64,6 +64,39 @@ fn flat_world() {
 }
 
 #[test]
+fn path_respects_node_limit() {
+    let w = world::World::empty();
+    let m = proto::MechCfg::default();
+    let nav = Nav::build_rect(&w, &m, [-10.0, -10.0, 10.0, 10.0]);
+    let start = [-4.0, 0.0, 0.0];
+    let f = nav.field([4.0, 0.0, 0.0]);
+    assert!(nav.path(&f, start, 0).is_empty());
+    assert_eq!(nav.path(&f, start, 1).len(), 1);
+    assert_eq!(nav.path(&f, start, 2).len(), 2);
+}
+
+#[test]
+fn limited_field_keeps_distant_nodes_unreachable() {
+    let w = world::World::empty();
+    let m = proto::MechCfg::default();
+    let mut nav = Nav::build_rect(&w, &m, [-10.0, -10.0, 10.0, 10.0]);
+    for packed in [true, false] {
+        if !packed {
+            nav.rp.clear();
+            nav.rp_first.fill(0);
+            nav.rj.clone_from(&nav.rev);
+            nav.rj_first.clone_from(&nav.rev_first);
+        }
+        let f = nav.field_limited(&[([0.0, 0.0, 0.0], 0.0)], -1.0, 2.0);
+        assert_eq!(nav.dist(&f, [2.0, 0.0, 0.0]), Some(2.0));
+        assert!(nav.dist(&f, [4.0, 0.0, 0.0]).is_none());
+        assert!(nav.dist(&f, [2.0, 2.0, 0.0]).is_none());
+        let f = nav.field_limited(&[([0.0, 0.0, 0.0], 3.0)], -1.0, 2.0);
+        assert!(nav.dist(&f, [0.0, 0.0, 0.0]).is_none());
+    }
+}
+
+#[test]
 fn real_map() {
     let Some(dir) = map_dir() else {
         eprintln!("map not found, skipped");

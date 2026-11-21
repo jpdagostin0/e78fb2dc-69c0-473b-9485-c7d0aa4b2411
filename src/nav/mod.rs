@@ -529,7 +529,7 @@ impl Nav {
                             dz * dz
                         };
                         let s = h2 + pen;
-                        if best.map_or(true, |(b, _)| s < b) {
+                        if best.is_none_or(|(b, _)| s < b) {
                             best = Some((s, nd));
                         }
                     }
@@ -579,7 +579,7 @@ impl Nav {
         loop {
             while sp < seeds.len() && (seeds[sp].1 as u64) < cur as u64 + bsz as u64 {
                 let (nd, c) = seeds[sp];
-                if c < d[nd as usize] {
+                if c <= limit && c < d[nd as usize] {
                     d[nd as usize] = c;
                     buckets[c as usize % bsz].push(nd);
                     pending += 1;
@@ -612,7 +612,7 @@ impl Nav {
                 let u = (pe >> PACK_COST_BITS) as usize;
                 // SAFETY: packed sources are node indices < n
                 let du = unsafe { d.get_unchecked_mut(u) };
-                if nd < *du {
+                if nd <= limit && nd < *du {
                     *du = nd;
                     buckets[nd as usize % bsz].push(u as u32);
                     pending += 1;
@@ -628,7 +628,7 @@ impl Nav {
                 let u = e.to as usize;
                 // SAFETY: edge targets are node indices < n
                 let du = unsafe { d.get_unchecked_mut(u) };
-                if nd < *du {
+                if nd <= limit && nd < *du {
                     *du = nd;
                     buckets[nd as usize % bsz].push(e.to);
                     pending += 1;
@@ -664,7 +664,7 @@ impl Nav {
                 continue;
             }
             let s = dt + e.cost as u32;
-            if best.map_or(true, |(b, _)| s < b) {
+            if best.is_none_or(|(b, _)| s < b) {
                 best = Some((s, *e));
             }
         }
@@ -675,7 +675,7 @@ impl Nav {
     pub fn path(&self, f: &Field, p: [f64; 3], max_nodes: usize) -> Vec<[f64; 3]> {
         let mut out = vec![];
         let Some(mut cur) = self.snap_node(p) else { return out };
-        if f.d.get(cur as usize).map_or(true, |&v| v == INF) {
+        if max_nodes == 0 || f.d.get(cur as usize).is_none_or(|&v| v == INF) {
             return out;
         }
         out.push(self.node_pos(cur));
@@ -780,7 +780,7 @@ impl Nav {
                 let (ei, ej) = self.cell_ij(e.to);
                 if ei == ni && ej == nj {
                     let dz = (self.node_z[e.to as usize] - zc).abs();
-                    if nxt.map_or(true, |(b, _)| dz < b) {
+                    if nxt.is_none_or(|(b, _)| dz < b) {
                         nxt = Some((dz, e.to));
                     }
                 }

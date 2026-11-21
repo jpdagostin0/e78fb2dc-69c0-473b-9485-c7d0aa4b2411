@@ -113,7 +113,7 @@ pub fn intercept_time(p: V3, v: V3, s: f64) -> Option<f64> {
     if a.abs() < 1e-9 {
         if b < -1e-12 {
             let t = -c / b;
-            return if t > 0.0 && t.is_finite() { Some(t) } else { None };
+            return (t > 0.0 && t.is_finite()).then_some(t);
         }
         return None;
     }

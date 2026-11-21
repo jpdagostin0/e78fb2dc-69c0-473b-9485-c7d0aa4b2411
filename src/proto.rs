@@ -9,7 +9,7 @@ pub type V3 = [f64; 3];
 
 fn de_i64<'de, D: Deserializer<'de>>(d: D) -> Result<i64, D::Error> {
     let v: Option<f64> = Option::deserialize(d)?;
-    Ok(v.map(|x| x as i64).unwrap_or(0))
+    Ok(v.map_or(0, |x| x as i64))
 }
 
 fn de_opt_i64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {

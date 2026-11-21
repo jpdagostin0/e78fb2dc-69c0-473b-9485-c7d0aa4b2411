@@ -260,7 +260,10 @@ fn parse_hello(line: &str) -> Option<Hello> {
 
 /// The process main loop. Returns the exit code.
 pub fn run() -> i32 {
-    LOG.store(std::env::var("MECH_LOG").map(|v| v == "1").unwrap_or(false), Ordering::Relaxed);
+    LOG.store(
+        std::env::var("MECH_LOG").is_ok_and(|v| v == "1"),
+        Ordering::Relaxed,
+    );
     silence_panics();
     let start = Instant::now();
     let rx = spawn_reader();

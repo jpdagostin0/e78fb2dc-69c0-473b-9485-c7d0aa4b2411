@@ -367,7 +367,7 @@ impl Brain {
 
         // stuck
         let pursuing = matches!(self.goal, Goal::Nav { .. } | Goal::Field { .. }) && !reached && !matches!(self.mode, Mode::Fight | Mode::Retreat);
-        if !(pursuing && (nav_wants || fld.is_none()) && d0.map_or(false, |d| d > arrive + 6.0)) {
+        if !(pursuing && (nav_wants || fld.is_none()) && d0.is_some_and(|d| d > arrive + 6.0)) {
             self.wants_since = t;
         }
         if !pursuing {
@@ -377,7 +377,7 @@ impl Brain {
                 if mv < p.stuck_dist {
                     self.unstick_level = if t - self.unstick_until < 6.0 { self.unstick_level + 1 } else { 1 };
                     let base = navdir.filter(|v| v[0].hypot(v[1]) > 0.5).unwrap_or([1.0, 0.0]);
-                    let turn = if self.unstick_level % 2 == 0 {
+                    let turn = if self.unstick_level.is_multiple_of(2) {
                         self.rng.range(-0.3, 0.3)
                     } else {
                         let sgn = if self.rng.f64() < 0.5 { -1.0 } else { 1.0 };

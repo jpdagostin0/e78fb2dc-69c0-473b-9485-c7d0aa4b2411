@@ -278,7 +278,7 @@ impl Memory {
         self.blacklist.retain(|&(_, until)| until > t);
 
         self.hist.push_back((t, me.pos));
-        while self.hist.front().map(|h| t - h.0 > 3.0).unwrap_or(false) {
+        while self.hist.front().is_some_and(|h| t - h.0 > 3.0) {
             self.hist.pop_front();
         }
     }

@@ -121,11 +121,15 @@ impl Near {
         s
     }
     fn each<'w>(&self, world: &'w World, mut f: impl FnMut(&'w Prism)) {
-        for k in 0..self.n {
-            if let Some(p) = world.prisms.get(self.idx[k] as usize) { f(p); }
+        for &i in &self.idx[..self.n] {
+            if let Some(p) = world.prisms.get(i as usize) {
+                f(p);
+            }
         }
         for &i in &self.extra {
-            if let Some(p) = world.prisms.get(i as usize) { f(p); }
+            if let Some(p) = world.prisms.get(i as usize) {
+                f(p);
+            }
         }
     }
     fn is_empty(&self) -> bool {

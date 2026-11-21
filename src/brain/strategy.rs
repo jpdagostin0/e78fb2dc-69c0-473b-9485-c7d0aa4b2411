@@ -97,11 +97,9 @@ impl Brain {
         }
         let (cur_c, cur_r) = zone_at(z, t, t, self.zone_b);
         let dn = dist2v(pos, z.next_center);
-        let is_final = z.next_radius <= p.final_radius;
         let margin = p.zone_margin.min(z.next_radius * 0.5);
         let inside_next = dn <= z.next_radius - margin;
         let safe_r = self.safe_radius(z);
-        let _ = is_final;
         let safe = if dn > safe_r && dn > 1e-6 {
             [z.next_center[0] + (pos[0] - z.next_center[0]) / dn * safe_r, z.next_center[1] + (pos[1] - z.next_center[1]) / dn * safe_r]
         } else {
@@ -235,9 +233,7 @@ impl Brain {
             let tp = tr.pos_at(t);
             let c = up(tp, self.cfg.mech.height * 0.5);
             let los = t - tr.last_seen < p.fresh_s && world.ray(muzzle, c).is_none();
-            if los || t - tr.last_dmg_t < 3.0 {
-                self.no_los = (tr.id, t);
-            } else if self.no_los.0 != tr.id {
+            if los || t - tr.last_dmg_t < 3.0 || self.no_los.0 != tr.id {
                 self.no_los = (tr.id, t);
             } else if t - self.no_los.1 > p.no_los_drop_s {
                 self.mem.ban(tr.id, t + 8.0);
@@ -310,7 +306,7 @@ impl Brain {
             if t - tr.last_seen < p.fresh_s {
                 s += 30.0;
             }
-            if best.map_or(true, |b| s > b.0) {
+            if best.is_none_or(|b| s > b.0) {
                 best = Some((s, tr));
             }
         }
@@ -366,7 +362,7 @@ impl Brain {
             if it.id == self.goal_id {
                 s -= 15.0;
             }
-            if best.as_ref().map_or(true, |b| s < b.0) {
+            if best.as_ref().is_none_or(|b| s < b.0) {
                 best = Some((s, LootPick { id: it.id, pos: it.pos, quick: d < p.loot_quick && empty }));
             }
         }
@@ -383,7 +379,7 @@ impl Brain {
                 if it.id == self.goal_id {
                     s -= 15.0;
                 }
-                if best.as_ref().map_or(true, |b| s < b.0) {
+                if best.as_ref().is_none_or(|b| s < b.0) {
                     best = Some((s, LootPick { id: it.id, pos: it.pos, quick: d < p.loot_quick * 0.5 }));
                 }
             }
@@ -412,7 +408,7 @@ impl Brain {
             if dist2v(d.pos, zi.cur_c) > zi.cur_r - 4.0 {
                 continue;
             }
-            if best.map_or(true, |b| dd < b.2) {
+            if best.is_none_or(|b| dd < b.2) {
                 best = Some((d.pos, d.radius.max(2.0), dd));
             }
         }
@@ -442,7 +438,7 @@ impl Brain {
                 if self.goal_id == tr.id {
                     s -= 20.0;
                 }
-                if best.as_ref().map_or(true, |b| s < b.0) {
+                if best.as_ref().is_none_or(|b| s < b.0) {
                     let c = up(tr.pos, self.cfg.npc.height * 0.5);
                     let los = t - tr.last_seen < p.fresh_s && world.ray(muzzle, c).is_none();
                     let g = if los { Goal::Range { pos: tr.pos, pref: p.range_npc } } else { Goal::Nav { pos: tr.pos, arrive: p.range_npc * 0.8 } };
@@ -463,7 +459,7 @@ impl Brain {
                 if self.goal_id == it.id {
                     s -= 20.0;
                 }
-                if best.as_ref().map_or(true, |b| s < b.0) {
+                if best.as_ref().is_none_or(|b| s < b.0) {
                     let c = up(it.pos, self.cfg.crates.height * 0.5);
                     let los = world.ray(muzzle, c).is_none();
                     let g = if los && d < 120.0 { Goal::Range { pos: it.pos, pref: p.range_crate } } else { Goal::Nav { pos: it.pos, arrive: p.range_crate } };
@@ -526,7 +522,7 @@ impl Brain {
             let out_next = (dist2v(q, z.next_center) - z.next_radius + 10.0).max(0.0);
             let near_threat = eyes.iter().map(|e| dist2(*e, q)).fold(f64::INFINITY, f64::min);
             let s = dist(q, pos) + 0.6 * out_next - 0.15 * near_threat.min(150.0) - bonus;
-            if best.map_or(true, |b| s < b.0) {
+            if best.is_none_or(|b| s < b.0) {
                 *best = Some((s, q));
             }
         };

@@ -227,7 +227,7 @@ impl Brain {
         if kind == WeaponKind::Unknown || me.weapons.iter().flatten().any(|w| w.kind == kind) {
             return None;
         }
-        if me.weapons.iter().any(|w| w.is_none()) {
+        if me.weapons.iter().any(Option::is_none) {
             return Some(None);
         }
         let mut worst: Option<(f64, usize)> = None;
@@ -237,7 +237,7 @@ impl Brain {
                 continue;
             }
             let pv = self.pref_of(w.kind);
-            if worst.map_or(true, |x| pv < x.0) {
+            if worst.is_none_or(|x| pv < x.0) {
                 worst = Some((pv, i));
             }
         }
@@ -260,7 +260,7 @@ impl Brain {
             }
             if let Some(slot) = self.want(me, pk.kind) {
                 let v = self.pref_of(pk.kind);
-                if best.map_or(true, |b| v > b.0) {
+                if best.is_none_or(|b| v > b.0) {
                     best = Some((v, pk.id, slot));
                 }
             }

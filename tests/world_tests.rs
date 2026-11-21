@@ -304,7 +304,7 @@ fn bench() {
     }
     let si = t.elapsed().as_secs_f64() * 1e9 / segs.len() as f64;
     // open-field rays: only the ones that are clear (worst case: full traversal)
-    let clear: Vec<_> = segs.iter().filter(|(a, b)| w.ray(*a, *b).is_none()).cloned().collect();
+    let clear: Vec<_> = segs.iter().filter(|(a, b)| w.ray(*a, *b).is_none()).copied().collect();
     let t = Instant::now();
     for (a, b) in &clear {
         nh += w.ray(*a, *b).is_some() as usize;
@@ -317,6 +317,7 @@ fn bench() {
         nsg += w.sight(*a, *b) as usize;
     }
     let sic = t.elapsed().as_secs_f64() * 1e9 / clear.len().max(1) as f64;
+    std::hint::black_box(nsg);
     let t = Instant::now();
     let mut np = 0;
     for p in pts.iter().take(20000) {

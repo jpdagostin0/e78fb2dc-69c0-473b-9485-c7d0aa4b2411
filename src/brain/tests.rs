@@ -113,7 +113,7 @@ fn run_stream(shared: Arc<Shared>, lines: &[String]) -> usize {
                     eprintln!("{} {:.2}ms hp={:.0} e={:.0} mv={:?} b={:?} aim={:?}/{:?} fire={:?} rl={:?} take={:?} | {}", o.tick, ms, o.me.hp, o.me.energy, a.move_.map(|m| [(m[0] * 100.0).round() / 100.0, (m[1] * 100.0).round() / 100.0]), a.boost, a.aim.map(|m| [(m[0] * 100.0).round() / 100.0, (m[1] * 100.0).round() / 100.0]), [(o.me.aim[0] * 100.0).round() / 100.0, (o.me.aim[1] * 100.0).round() / 100.0], a.fire, a.reload, a.take, b.state());
                 }
                 check_action(&a, o.tick);
-                if a.move_.map_or(false, |m| m[0].hypot(m[1]) > 0.5) {
+                if a.move_.is_some_and(|m| m[0].hypot(m[1]) > 0.5) {
                     moved += 1;
                 }
                 n += 1;
@@ -207,7 +207,7 @@ fn zone_walk() {
                 }
             }
         };
-        if std::env::var("MECH_ONLY").ok().and_then(|s| s.parse::<usize>().ok()).map_or(false, |o| o != run) {
+        if std::env::var("MECH_ONLY").ok().and_then(|s| s.parse::<usize>().ok()).is_some_and(|o| o != run) {
             continue;
         }
         let mut h = hello.clone();
@@ -350,7 +350,7 @@ fn stress_timing() {
         let a = brain.act(&o, &Budget::from_now_ms(30.0));
         times.push(w0.elapsed().as_secs_f64() * 1000.0);
         check_action(&a, o.tick);
-        if a.fire.map_or(false, |f| f[0] || f[1]) {
+        if a.fire.is_some_and(|f| f[0] || f[1]) {
             fired += 1;
         }
     }
