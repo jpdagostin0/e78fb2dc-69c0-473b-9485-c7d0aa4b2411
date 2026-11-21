@@ -1,1 +1,1 @@
-{"pref_laser":8,"pref_lightning":2,"pref_mortar":0,"loot_swap_max":150,"idle_frac":0.95,"zone_margin":10,"zone_extra":5,"hold_unseen":true,"passive_aim":0.4,"passive_near":25}
+{"pref_laser":8,"pref_lightning":2,"pref_mortar":0,"loot_swap_max":90,"idle_frac":0.95,"zone_margin":10,"zone_extra":5,"hold_unseen":true,"passive_aim":0.4,"passive_near":25,"loot_weapon_max":160}
