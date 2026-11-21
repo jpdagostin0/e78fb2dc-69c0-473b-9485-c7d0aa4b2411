@@ -225,7 +225,7 @@ impl Brain {
             mode = Mode::Loot;
             goal = Goal::Nav { pos: l.pos, arrive: 1.2 };
             goal_id = l.id;
-        } else if let Some(d) = drop.filter(|d| tgt.is_none() || d.2 < 50.0 || hpf < 0.6) {
+        } else if let Some(d) = drop.filter(|d| tgt.is_none() || d.2 < 50.0 || (hpf < 0.6 && near_mech > 120.0 && t - self.mem.last_damage_t > 3.0)) {
             mode = Mode::Drop;
             goal = Goal::Nav { pos: d.0, arrive: (d.1 * 0.3).max(1.0) };
         } else if let Some(tr) = &tgt {
