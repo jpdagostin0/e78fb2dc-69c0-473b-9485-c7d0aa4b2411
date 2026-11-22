@@ -175,6 +175,7 @@ struct Out {
     last_move: Option<[f64; 2]>,
     last_boost: Option<bool>,
     last_aim: Option<[f64; 2]>,
+    last_fire: [bool; 2],
 }
 
 impl Out {
@@ -194,6 +195,7 @@ impl Out {
         if a.aim.is_some() {
             self.last_aim = a.aim;
         }
+        self.last_fire = a.fire.unwrap_or([false, false]);
         let mut s = serde_json::to_string(&a).unwrap_or_default();
         if s.len() > self.max_line && a.debug.is_some() {
             a.debug = None;
@@ -212,6 +214,15 @@ impl Out {
     fn fallback(&self, tick: i64) -> Action {
         Action { tick, move_: self.last_move, boost: self.last_boost, aim: self.last_aim, ..Default::default() }
     }
+
+    fn fallback_hold(&self, tick: i64, hold: [bool; 2]) -> Action {
+        let mut a = self.fallback(tick);
+        let f = [self.last_fire[0] && hold[0], self.last_fire[1] && hold[1]];
+        if f[0] || f[1] {
+            a.fire = Some(f);
+        }
+        a
+    }
 }
 
 fn silence_panics() {
@@ -221,6 +232,33 @@ fn silence_panics() {
             default(info);
         }
     }));
+}
+
+fn strip_nulls(v: &mut serde_json::Value, key: &str) {
+    match v {
+        serde_json::Value::Object(m) => {
+            m.retain(|_, x| !x.is_null());
+            for (k, x) in m.iter_mut() {
+                strip_nulls(x, k);
+            }
+        }
+        serde_json::Value::Array(a) => {
+            if key != "weapons" {
+                a.retain(|x| !x.is_null());
+            }
+            for x in a.iter_mut() {
+                strip_nulls(x, "");
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Parses a server line again with null fields removed.
+fn parse_lenient(line: &str) -> Option<ServerMsg> {
+    let mut v: serde_json::Value = serde_json::from_str(line).ok()?;
+    strip_nulls(&mut v, "");
+    serde_json::from_value::<ServerMsg>(v).ok()
 }
 
 /// Peeks the tick of a line that did not parse as an observation.
@@ -260,10 +298,7 @@ fn parse_hello(line: &str) -> Option<Hello> {
 
 /// The process main loop. Returns the exit code.
 pub fn run() -> i32 {
-    LOG.store(
-        std::env::var("MECH_LOG").is_ok_and(|v| v == "1"),
-        Ordering::Relaxed,
-    );
+    LOG.store(std::env::var("MECH_LOG").map(|v| v == "1").unwrap_or(false), Ordering::Relaxed);
     silence_panics();
     let start = Instant::now();
     let rx = spawn_reader();
@@ -290,7 +325,7 @@ pub fn run() -> i32 {
     let max_line = if hello.config.bot.max_line_bytes > 0.0 { hello.config.bot.max_line_bytes as usize } else { 65536 };
     let (jtx, drx) = spawn_worker(hello.clone(), shared, brain);
 
-    let mut out = Out { max_line, last_move: None, last_boost: None, last_aim: None };
+    let mut out = Out { max_line, last_move: None, last_boost: None, last_aim: None, last_fire: [false, false] };
     out.line(&Ready::new(BOT_NAME));
     log(&format!("ready after {:?} (shared loaded after {:?})", start.elapsed(), loaded));
 
@@ -316,7 +351,10 @@ pub fn run() -> i32 {
                 }
                 Ok(_) => {}
                 Err(err) => {
-                    if let Some(tick) = raw_obs_tick(&line) {
+                    if let Some(ServerMsg::Obs(o)) = parse_lenient(&line) {
+                        log(&format!("obs parsed leniently at tick {}: {err}", o.tick));
+                        newest = Some((t, Ok(o)));
+                    } else if let Some(tick) = raw_obs_tick(&line) {
                         log(&format!("obs parse error at tick {tick}: {err}"));
                         newest = Some((t, Err(tick)));
                     } else if line.contains("\"end\"") {
@@ -338,6 +376,10 @@ pub fn run() -> i32 {
             }
         };
         let tick = obs.tick;
+        let mut hold = [false; 2];
+        for (i, w) in obs.me.weapons.iter().take(2).enumerate() {
+            hold[i] = w.as_ref().map_or(false, |w| w.kind == crate::proto::WeaponKind::Laser && w.charge > 0.0);
+        }
         let deadline = t_read + io_wait;
         if jtx.send(Job { obs, budget: Budget::until(t_read + brain_wait) }).is_err() {
             out.action(out.fallback(tick));
@@ -372,11 +414,42 @@ pub fn run() -> i32 {
             None => {
                 fallbacks += 1;
                 log(&format!("fallback at tick {tick}"));
-                out.action(out.fallback(tick))
+                out.action(out.fallback_hold(tick, hold))
             }
         }
     }
     log(&format!("exit: answered {answered}, fallbacks {fallbacks}, panics {panics}"));
     let _ = io::stdout().flush();
     0
+}
+
+#[cfg(test)]
+mod lenient_tests {
+    use super::*;
+
+    #[test]
+    fn null_fields_parse_leniently() {
+        let line = r#"{"type":"obs","tick":7,"t":0.35,"alive":null,"self":{"id":2,"pos":[1,2,3],"hp":null,"weapons":[{"kind":"gun","ammo":null,"cooldown":0},null]},"mechs":[{"id":5,"kind":"mech","pos":[0,0,0],"hp":null,"charging":null,"weapons":null}],"pickups":null,"events":[{"type":"damaged","amount":10,"weapon":"gun","bearing":null,"by":null}],"offer":null}"#;
+        assert!(serde_json::from_str::<ServerMsg>(line).is_err());
+        match parse_lenient(line) {
+            Some(ServerMsg::Obs(o)) => {
+                assert_eq!(o.tick, 7);
+                assert_eq!(o.me.weapons.len(), 2);
+                assert!(o.me.weapons[1].is_none());
+                assert_eq!(o.mechs.len(), 1);
+            }
+            _ => panic!("lenient parse failed"),
+        }
+    }
+
+    #[test]
+    fn fallback_keeps_laser_charge_only() {
+        let mut out = Out { max_line: 65536, last_move: None, last_boost: None, last_aim: None, last_fire: [true, true] };
+        let a = out.fallback_hold(3, [false, true]);
+        assert_eq!(a.fire, Some([false, true]));
+        let a = out.fallback_hold(3, [false, false]);
+        assert_eq!(a.fire, None);
+        out.last_fire = [false, false];
+        assert_eq!(out.fallback_hold(3, [true, true]).fire, None);
+    }
 }

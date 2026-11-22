@@ -7,14 +7,9 @@ pub mod world;
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-/// Size multipliers (from cubes) that get their own nav graph besides the base one.
-pub const NAV_SCALES: [f64; 3] = [1.2, 1.4, 1.6];
-
 pub struct Shared {
     pub world: world::World,
     pub nav: nav::Nav,
-    /// (scale, nav built for a mech of that size), ascending by scale.
-    pub big: Vec<(f64, nav::Nav)>,
 }
 
 impl Shared {
@@ -38,17 +33,7 @@ impl Shared {
                 nav::Nav::build(&world::World::empty(), &cfg.mech)
             }
         };
-        let mut big = Vec::new();
-        for s in NAV_SCALES {
-            let mut m = cfg.mech.clone();
-            m.radius *= s;
-            m.height *= s;
-            match catch_unwind(AssertUnwindSafe(|| nav::Nav::build(&world, &m))) {
-                Ok(n) => big.push((s, n)),
-                Err(_) => runtime::log(&format!("nav build panicked at scale {s}")),
-            }
-        }
-        Self { world, nav, big }
+        Shared { world, nav }
     }
 }
 

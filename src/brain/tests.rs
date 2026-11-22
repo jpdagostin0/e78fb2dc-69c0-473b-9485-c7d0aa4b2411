@@ -113,7 +113,7 @@ fn run_stream(shared: Arc<Shared>, lines: &[String]) -> usize {
                     eprintln!("{} {:.2}ms hp={:.0} e={:.0} mv={:?} b={:?} aim={:?}/{:?} fire={:?} rl={:?} take={:?} | {}", o.tick, ms, o.me.hp, o.me.energy, a.move_.map(|m| [(m[0] * 100.0).round() / 100.0, (m[1] * 100.0).round() / 100.0]), a.boost, a.aim.map(|m| [(m[0] * 100.0).round() / 100.0, (m[1] * 100.0).round() / 100.0]), [(o.me.aim[0] * 100.0).round() / 100.0, (o.me.aim[1] * 100.0).round() / 100.0], a.fire, a.reload, a.take, b.state());
                 }
                 check_action(&a, o.tick);
-                if a.move_.is_some_and(|m| m[0].hypot(m[1]) > 0.5) {
+                if a.move_.map_or(false, |m| m[0].hypot(m[1]) > 0.5) {
                     moved += 1;
                 }
                 n += 1;
@@ -132,7 +132,7 @@ fn recorded_stream() {
     let text = std::fs::read_to_string(path).expect("stream");
     let lines: Vec<String> = text.lines().map(|s| s.to_string()).collect();
     let cfg = crate::proto::Config::default();
-    let empty = Arc::new(Shared { world: crate::world::World::empty(), nav: crate::nav::Nav::build(&crate::world::World::empty(), &cfg.mech), big: Vec::new() });
+    let empty = Arc::new(Shared { world: crate::world::World::empty(), nav: crate::nav::Nav::build(&crate::world::World::empty(), &cfg.mech) });
     let n = run_stream(empty, &lines);
     assert!(n >= 300, "only {n} observations");
     if let Ok(dir) = std::env::var("MECH_MAP") {
@@ -147,7 +147,7 @@ fn recorded_stream() {
 fn degenerate_obs() {
     let hello = crate::proto::Hello::default();
     let cfg = &hello.config;
-    let shared = Arc::new(Shared { world: crate::world::World::empty(), nav: crate::nav::Nav::build(&crate::world::World::empty(), &cfg.mech), big: Vec::new() });
+    let shared = Arc::new(Shared { world: crate::world::World::empty(), nav: crate::nav::Nav::build(&crate::world::World::empty(), &cfg.mech) });
     let mut b = Brain::with_params(&hello, shared, Params::default());
     let o: crate::proto::Obs = serde_json::from_str("{}").unwrap();
     let a = b.act(&o, &Budget::unlimited());
@@ -207,7 +207,7 @@ fn zone_walk() {
                 }
             }
         };
-        if std::env::var("MECH_ONLY").ok().and_then(|s| s.parse::<usize>().ok()).is_some_and(|o| o != run) {
+        if std::env::var("MECH_ONLY").ok().and_then(|s| s.parse::<usize>().ok()).map_or(false, |o| o != run) {
             continue;
         }
         let mut h = hello.clone();
@@ -350,7 +350,7 @@ fn stress_timing() {
         let a = brain.act(&o, &Budget::from_now_ms(30.0));
         times.push(w0.elapsed().as_secs_f64() * 1000.0);
         check_action(&a, o.tick);
-        if a.fire.is_some_and(|f| f[0] || f[1]) {
+        if a.fire.map_or(false, |f| f[0] || f[1]) {
             fired += 1;
         }
     }

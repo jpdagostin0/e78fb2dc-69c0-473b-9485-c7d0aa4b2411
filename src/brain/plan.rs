@@ -312,6 +312,9 @@ impl Brain {
             arrive = a;
             let calm = self.roof_jet || (t - self.mem.last_damage_t > 3.0 && !matches!(self.mode, Mode::Fight | Mode::Retreat));
             let jet_e = if calm { me.max_energy * 0.8 } else { -1.0 };
+            if let Some((k, tk, f)) = super::fieldsvc::poll(&mut self.fsvc.nav) {
+                self.field = Some(([k[0], k[1], k[2]], std::sync::Arc::new(f), tk));
+            }
             let need = match &self.field {
                 Some((fg, f, tb)) => {
                     let moved = dist(*fg, g);
@@ -322,7 +325,11 @@ impl Brain {
             if need && budget.remaining_ms() > p.field_min_budget_ms && (self.field.is_none() || self.spent_ms() < 8.0) {
                 let sg = nav.snap(g).filter(|q| q.iter().all(|x| x.is_finite())).unwrap_or(g);
                 let lim = dist2(pos, sg) * 2.0 + 120.0;
-                self.field = Some((g, std::sync::Arc::new(nav.field_limited(&[(sg, 0.0)], jet_e, lim)), t));
+                let shared = self.shared.clone();
+                let tol = p.field_regoal.max(0.0);
+                if let Some(f) = super::fieldsvc::request(&mut self.fsvc, 1, &shared, [g[0], g[1], g[2], jet_e], tol, t, budget, 10.0, move |nav| nav.field_limited(&[(sg, 0.0)], jet_e, lim)) {
+                    self.field = Some((g, std::sync::Arc::new(f), t));
+                }
             }
             if let Some((fg, f, _)) = &self.field {
                 let stale = dist(*fg, g);
@@ -351,15 +358,6 @@ impl Brain {
                     }
                 }
             }
-            // The field measures to the node nearest the goal, which can sit metres short of it.
-            // Once that node is reached, walk the rest in a straight line.
-            let direct = dist2(pos, g);
-            if direct > a && direct < 12.0 && (g[2] - pos[2]).abs() < 4.0 && d0.is_some_and(|d| d <= direct + 3.0) {
-                d0 = Some(direct);
-                navdir = Some(unit2(g[0] - pos[0], g[1] - pos[1]));
-                nav_wants = true;
-                fld = None;
-            }
             if d0.is_none() {
                 d0 = Some(dist2(pos, g));
             }
@@ -376,7 +374,7 @@ impl Brain {
 
         // stuck
         let pursuing = matches!(self.goal, Goal::Nav { .. } | Goal::Field { .. }) && !reached && !matches!(self.mode, Mode::Fight | Mode::Retreat);
-        if !(pursuing && (nav_wants || fld.is_none()) && d0.is_some_and(|d| d > arrive + 6.0)) {
+        if !(pursuing && (nav_wants || fld.is_none()) && d0.map_or(false, |d| d > arrive + 6.0)) {
             self.wants_since = t;
         }
         if !pursuing {
@@ -386,7 +384,7 @@ impl Brain {
                 if mv < p.stuck_dist {
                     self.unstick_level = if t - self.unstick_until < 6.0 { self.unstick_level + 1 } else { 1 };
                     let base = navdir.filter(|v| v[0].hypot(v[1]) > 0.5).unwrap_or([1.0, 0.0]);
-                    let turn = if self.unstick_level.is_multiple_of(2) {
+                    let turn = if self.unstick_level % 2 == 0 {
                         self.rng.range(-0.3, 0.3)
                     } else {
                         let sgn = if self.rng.f64() < 0.5 { -1.0 } else { 1.0 };
@@ -431,6 +429,35 @@ impl Brain {
         if juke.is_some() && t >= self.juke_next {
             self.juke_side = -self.juke_side;
             self.juke_next = t + self.rng.range(p.juke_min_s, p.juke_max_s.max(p.juke_min_s));
+        }
+        let mut w_juke = p.w_juke;
+        if p.w_cad > 0.0 {
+            let mut pick: Option<(f64, V2)> = None;
+            for m in &obs.mechs {
+                if m.kind != ActorKind::Mech {
+                    continue;
+                }
+                let d = dist2(m.pos, pos);
+                if d < p.cad_min || d > p.cad_max {
+                    continue;
+                }
+                if self.cad.due(m.id, t, p.cad_period, p.cad_win, p.cad_keep, p.cad_off, p.cad_reg.max(0.0) as u32) && pick.map_or(true, |x| d < x.0) {
+                    let u = unit2(pos[0] - m.pos[0], pos[1] - m.pos[1]);
+                    pick = Some((d, [-u[1], u[0]]));
+                }
+            }
+            if let Some((_, ax)) = pick {
+                if t >= self.cad_until - p.cad_period {
+                    self.juke_side = -self.juke_side;
+                }
+                self.juke_next = t + p.cad_period + 0.05;
+                self.cad_until = t + p.cad_period + 0.05;
+                self.cad_axis = ax;
+            }
+            if t < self.cad_until {
+                juke = Some(self.cad_axis);
+                w_juke = p.w_cad;
+            }
         }
 
         let under_fire = t - self.mem.last_damage_t < 1.0 || !shots.is_empty() || !blasts.is_empty() || threats.iter().any(|th| th.charge_left.is_some() && th.los_now);
@@ -516,9 +543,9 @@ impl Brain {
             s -= p.w_blocked * c.blocked;
             s += p.w_smooth * (c.dir[0] * self.last_dir[0] + c.dir[1] * self.last_dir[1]);
             if let Some(j) = juke {
-                s += p.w_juke * self.juke_side * (c.dir[0] * j[0] + c.dir[1] * j[1]) * (c.speed / walk).min(1.3);
+                s += w_juke * self.juke_side * (c.dir[0] * j[0] + c.dir[1] * j[1]) * (c.speed / walk).min(1.3);
                 if c.speed == 0.0 {
-                    s -= p.w_juke * 0.6;
+                    s -= w_juke * 0.6;
                 }
             }
             if c.boost {
@@ -544,6 +571,9 @@ impl Brain {
                 }
             }
             s -= p.w_proj * self.incoming_cost(c, &shots, &blasts, radius, height);
+            if p.w_antilead > 0.0 {
+                s -= p.w_antilead * super::aimz::antilead(c.pts.as_slice(), DT, pos, me.vel, threats.iter().filter(|th| th.gun && !th.ghost && th.los_now).map(|th| (th.eye, th.aim_yaw)), radius + self.cfg.projectile.gun_radius, self.cfg.weapons.gun.speed.max(1.0), p.antilead_lat, p.antilead_sigma, self.cfg.weapons.gun.damage);
+            }
             c.score = s;
         }
 

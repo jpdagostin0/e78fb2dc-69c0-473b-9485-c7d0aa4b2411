@@ -182,13 +182,8 @@ pub struct World {
 }
 
 fn flat_pairs(v: &serde_json::Value) -> Vec<[f64; 2]> {
-    let a = v.as_array().map(Vec::as_slice).unwrap_or(&[]);
-    let mut out: Vec<[f64; 2]> = a
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|c| [c[0].as_f64().unwrap_or(0.0), c[1].as_f64().unwrap_or(0.0)])
-        .collect();
+    let a = v.as_array().map(|a| a.as_slice()).unwrap_or(&[]);
+    let mut out: Vec<[f64; 2]> = a.chunks(2).filter(|c| c.len() == 2).map(|c| [c[0].as_f64().unwrap_or(0.0), c[1].as_f64().unwrap_or(0.0)]).collect();
     if out.len() > 1 && out[0] == out[out.len() - 1] {
         out.pop();
     }

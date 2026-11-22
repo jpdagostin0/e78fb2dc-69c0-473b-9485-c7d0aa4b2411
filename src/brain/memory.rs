@@ -27,11 +27,6 @@ impl Track {
     pub fn has(&self, k: WeaponKind) -> bool {
         self.weapons.contains(&k)
     }
-    /// Attacked us lately, or is facing us.
-    pub fn hostile(&self, t: f64, me: V3, aim_tol: f64) -> bool {
-        let to_us = (me[1] - self.pos[1]).atan2(me[0] - self.pos[0]);
-        t - self.last_dmg_t < 6.0 || adiff(self.aim[0], to_us).abs() < aim_tol
-    }
     pub fn pos_at(&self, t: f64) -> V3 {
         let dt = (t - self.last_seen).clamp(0.0, 1.0);
         add(self.pos, scale([self.vel[0], self.vel[1], 0.0], dt))
@@ -76,6 +71,8 @@ pub struct Memory {
     pub hist: VecDeque<(f64, V3)>,
     pub blacklist: Vec<(i64, f64)>,
     pub last_t: f64,
+    pub range_fails: Vec<(i64, u32)>,
+    pub range_ban: f64,
 }
 
 fn should_see(obs: &Obs, world: &World, cfg: &Config, p: V3) -> bool {
@@ -137,6 +134,8 @@ impl Memory {
             hist: VecDeque::new(),
             blacklist: Vec::new(),
             last_t: -1.0,
+            range_fails: Vec::new(),
+            range_ban: 0.0,
         }
     }
 
@@ -247,7 +246,27 @@ impl Memory {
                 }
                 Event::TakeFailed(f) => match f.reason {
                     TakeFailReason::Gone => self.pickups.retain(|x| x.id != f.id),
-                    TakeFailReason::Range => {}
+                    TakeFailReason::Range => {
+                        if self.range_ban > 0.0 {
+                            let n = match self.range_fails.iter_mut().find(|x| x.0 == f.id) {
+                                Some(x) => {
+                                    x.1 += 1;
+                                    x.1
+                                }
+                                None => {
+                                    self.range_fails.push((f.id, 1));
+                                    if self.range_fails.len() > 32 {
+                                        self.range_fails.remove(0);
+                                    }
+                                    1
+                                }
+                            };
+                            if n as f64 >= self.range_ban {
+                                self.range_fails.retain(|x| x.0 != f.id);
+                                self.ban(f.id, t + 8.0);
+                            }
+                        }
+                    }
                     _ => self.ban(f.id, t + 8.0),
                 },
                 _ => {}
@@ -283,7 +302,7 @@ impl Memory {
         self.blacklist.retain(|&(_, until)| until > t);
 
         self.hist.push_back((t, me.pos));
-        while self.hist.front().is_some_and(|h| t - h.0 > 3.0) {
+        while self.hist.front().map(|h| t - h.0 > 3.0).unwrap_or(false) {
             self.hist.pop_front();
         }
     }

@@ -86,7 +86,7 @@ impl RoofMap {
                 }
                 let e = exposure(world, nav.node_pos(a), height);
                 let s = e - 0.02 * m;
-                if best.is_none_or(|b| s < b.0) {
+                if best.map_or(true, |b| s < b.0) {
                     best = Some((s, m, a));
                 }
             }
@@ -171,7 +171,7 @@ impl Brain {
             if self.roof_sel == Some(i) {
                 s += 25.0;
             }
-            if best.is_none_or(|b| s > b.0) {
+            if best.map_or(true, |b| s > b.0) {
                 best = Some((s, i));
             }
         }
@@ -198,11 +198,11 @@ impl Brain {
                 let q0 = [keep[0] + b.cos() * k, keep[1] + b.sin() * k, keep[2] + 1.0];
                 k += 2.5;
                 let Some(n) = nav.snap_node(q0) else { continue };
-                if rm.node_region.get(&n).is_none_or(|&x| x as usize != ri) {
+                if rm.node_region.get(&n).map_or(true, |&x| x as usize != ri) {
                     continue;
                 }
                 let q = nav.node_pos(n);
-                if best.is_some_and(|bb| dist2(q, keep) >= bb.0) {
+                if best.map_or(false, |bb| dist2(q, keep) >= bb.0) {
                     break;
                 }
                 rays += 1;
@@ -340,7 +340,7 @@ impl Brain {
                 if self.target == Tgt::Mech(f.id) {
                     s += 20.0;
                 }
-                if best.is_none_or(|b| s > b.0) {
+                if best.map_or(true, |b| s > b.0) {
                     best = Some((s, f.id, f.pos));
                 }
             }

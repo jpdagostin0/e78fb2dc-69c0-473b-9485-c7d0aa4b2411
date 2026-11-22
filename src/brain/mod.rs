@@ -1,12 +1,34 @@
 mod aim;
+mod audit;
+mod burst;
+mod aimz;
+mod kill;
+mod keep;
+mod laser;
+mod econ;
+mod gear;
+mod ffa;
 mod math;
+mod mx;
+mod rat;
+mod fz;
+mod fz3;
 mod memory;
+mod order;
 mod params;
 mod plan;
+mod squad;
+mod fieldsvc;
 mod roof;
+mod early;
+mod safety;
 mod strategy;
+mod survive;
+mod tele;
 #[cfg(test)]
 mod tests;
+mod wave;
+mod vx;
 
 pub use params::Params;
 
@@ -56,12 +78,12 @@ pub struct Brain {
     pub(crate) goal: Goal,
     pub(crate) goal_id: i64,
     pub(crate) pursuit: (i64, f64),
-    /// Loot goal id, closest distance reached so far, and when it was reached.
-    pub(crate) loot_best: (i64, f64, f64),
     pub(crate) target: Tgt,
     pub(crate) allow_crates: bool,
     pub(crate) field: Option<(V3, Arc<nav::Field>, f64)>,
     pub(crate) zone_field: Option<(V2, f64, Arc<nav::Field>)>,
+    pub(crate) fsvc: fieldsvc::FieldSvc,
+    pub(crate) budget: Budget,
     pub(crate) goal_unreachable: bool,
     pub(crate) cover: Option<(V3, f64)>,
     pub(crate) last_dir: V2,
@@ -79,6 +101,18 @@ pub struct Brain {
     pub(crate) t_act: std::time::Instant,
     pub(crate) no_los: (i64, f64),
     pub(crate) jet: Option<(V3, f64)>,
+    pub(crate) sq: squad::Book,
+    pub(crate) econ: econ::Econ,
+    pub(crate) gear: gear::Gear,
+    pub(crate) sf: safety::Safety,
+    pub(crate) wave: wave::WaveState,
+    pub(crate) vx: vx::Vx,
+    pub(crate) ffa: ffa::Ffa,
+    pub(crate) rat: rat::Rat,
+    pub(crate) fz: fz::Fz,
+    pub(crate) spot: Option<(V3, f64, bool)>,
+    pub(crate) order: order::Order,
+    pub(crate) order_has_passive: bool,
     pub(crate) roof: Option<Arc<roof::RoofMap>>,
     pub(crate) roof_sel: Option<usize>,
     pub(crate) roof_sel_t: f64,
@@ -90,7 +124,14 @@ pub struct Brain {
     pub(crate) roof_step: Option<(i64, Option<V3>, f64)>,
     pub(crate) roof_first_t: f64,
     pub(crate) kills: u32,
-    pub(crate) nav_scale: f64,
+    pub(crate) pk: laser::Peek,
+    pub(crate) tele: tele::Tele,
+    pub(crate) bu: burst::BurstSt,
+    pub(crate) aimz: aimz::AimZ,
+    pub(crate) cad: aimz::Cadence,
+    pub(crate) cad_until: f64,
+    pub(crate) cad_axis: V2,
+    pub(crate) au: audit::Audit,
     #[cfg(test)]
     pub(crate) dbg: String,
 }
@@ -119,11 +160,12 @@ impl Brain {
             goal: Goal::None,
             goal_id: -1,
             pursuit: (-1, 0.0),
-            loot_best: (-1, 0.0, 0.0),
             target: Tgt::None,
             allow_crates: false,
             field: None,
             zone_field: None,
+            fsvc: fieldsvc::FieldSvc::default(),
+            budget: Budget::unlimited(),
             goal_unreachable: false,
             cover: None,
             last_dir: [0.0, 0.0],
@@ -141,6 +183,18 @@ impl Brain {
             t_act: std::time::Instant::now(),
             no_los: (-1, 0.0),
             jet: None,
+            sq: squad::Book::new(),
+            econ: econ::Econ::default(),
+            gear: gear::Gear::default(),
+            sf: safety::Safety::default(),
+            wave: wave::WaveState::new(),
+            vx: vx::Vx::default(),
+            ffa: ffa::Ffa::new(hello.seed),
+            rat: rat::Rat::default(),
+            fz: fz::Fz::default(),
+            spot: None,
+            order: order::Order::default(),
+            order_has_passive: false,
             roof,
             roof_sel: None,
             roof_sel_t: -1e9,
@@ -152,7 +206,14 @@ impl Brain {
             roof_step: None,
             roof_first_t: -1.0,
             kills: 0,
-            nav_scale: 1.0,
+            pk: laser::Peek::new(),
+            tele: tele::Tele::default(),
+            bu: burst::BurstSt::default(),
+            aimz: aimz::AimZ::new(),
+            cad: aimz::Cadence::new(),
+            cad_until: -1.0,
+            cad_axis: [1.0, 0.0],
+            au: audit::Audit::new(),
             #[cfg(test)]
             dbg: String::new(),
         }
@@ -160,40 +221,93 @@ impl Brain {
 
     pub fn act(&mut self, obs: &Obs, budget: &Budget) -> Action {
         self.t_act = std::time::Instant::now();
-        // The server scales eye and muzzle with cubes but reports the base radius and height.
-        let mut scaled = obs.clone();
-        let k = 1.0 + self.cfg.cubes.size_per_cube * obs.me.cubes.max(0.0);
-        scaled.me.stats.radius = scaled.me.stats.radius.max(self.cfg.mech.radius * k);
-        scaled.me.stats.height = scaled.me.stats.height.max(self.cfg.mech.height * k);
-        let obs = &scaled;
+        let act = self.act_inner(obs, budget);
+        if self.p.fz_on > 0.5 {
+            let ms = self.t_act.elapsed().as_secs_f64() * 1000.0;
+            if ms > self.fz.max_ms {
+                self.fz.max_ms = ms;
+            }
+        }
+        act
+    }
+
+    fn act_inner(&mut self, obs: &Obs, budget: &Budget) -> Action {
+        self.budget = *budget;
         let mut act = Action::new(obs.tick);
         let shared = self.shared.clone();
         let world = &shared.world;
-        // smallest nav graph that fits our current size
-        let (nav_scale, nav) = match shared.big.iter().find(|(s, _)| *s + 1e-9 >= k).or(shared.big.last()) {
-            Some((s, n)) if k > 1.0 + 1e-9 => (*s, n),
-            _ => (1.0, &shared.nav),
-        };
-        if nav_scale != self.nav_scale {
-            self.nav_scale = nav_scale;
-            self.field = None;
-            self.zone_field = None;
-        }
+        let nav = &shared.nav;
+        self.econ_update(obs);
+        self.wave_count(obs);
+        self.mem.range_ban = self.p.take_range_ban;
         self.mem.update(obs, world, &self.cfg);
+        self.sf_update(obs, world);
+        self.vx_update(obs, world);
+        if self.p.aimz_on > 0.0 {
+            self.aimz.update(obs);
+        }
+        if self.p.w_cad > 0.0 {
+            self.cad.update(obs, self.p.cad_period, self.p.cad_snap);
+        }
+        self.wave_update(obs, world, nav);
+        self.ffa.update(obs, &self.mem.tracks, self.p.ffa_on > 0.5 || self.p.rat_on > 0.5 || self.p.fz_on > 0.5, self.p.mx_third > 0.0);
+        self.fz_update(obs);
+        self.order.update(obs);
+        self.tele_update(obs);
+        if self.p.halt_multi >= 1.0 && !self.order.halted && self.order.on_us(obs.t) as f64 >= self.p.halt_multi {
+            self.order.halted = true;
+        }
         if let Some(of) = &obs.offer {
             act.pick = Some(self.pick_upgrade(of));
         }
+        let unreach = self.goal_unreachable;
         self.decide(obs, world, nav);
-        let fc = self.fire_control(obs, world);
-        let mv = self.plan_move(obs, world, nav, budget, &fc);
+        self.laser_pre(obs, world, nav);
+        self.rat_pre(obs, world, nav, unreach);
+        let mut fc = self.fire_control(obs, world);
+        let mut snap: [FireSnap; 5] = Default::default();
+        snap[0] = FireSnap::of(&fc);
+        if let Some(y) = self.gear_sweep(obs, fc.target.is_some() || fc.fire[0] || fc.fire[1] || fc.charging) {
+            fc.aim = [y, 0.0];
+        }
+        snap[1] = FireSnap::of(&fc);
+        let mut mv = self.plan_move(obs, world, nav, budget, &fc);
+        if !mv.boost && self.gear_boost(obs) && mv.dir[0].hypot(mv.dir[1]) > 0.5 {
+            mv.boost = true;
+        }
+        if self.vx.seeking && self.p.sk_boost >= 0.5 && obs.me.grounded && obs.me.energy > obs.me.max_energy * 0.5 && mv.dir[0].hypot(mv.dir[1]) > 0.5 {
+            mv.boost = true;
+        }
+        if let Some((j, b)) = self.gear_jet(obs) {
+            mv.jump = mv.jump || j;
+            mv.boost = mv.boost || b;
+        }
+        if self.fz_nojump(obs) {
+            mv.jump = false;
+        }
+        if self.fz.boost && self.fz.forced && self.mode == Mode::Retreat && obs.me.grounded {
+            mv.boost = true;
+        }
+        self.laser_post(obs, world, &mut fc, &mut mv);
+        snap[2] = FireSnap::of(&fc);
+        self.es_filter(obs, &mut fc);
+        if self.vx.hold {
+            fc.fire = [false, false];
+        }
+        self.burst_post(obs, world, &mut fc, &mut mv);
+        self.fz3_post(obs, world, &mut fc);
+        snap[3] = FireSnap::of(&fc);
         self.loot_action(obs, &mut act);
-        act.move_ = Some(mv.dir);
+        self.sf_drop(obs, &mut act);
+        self.rat_post(obs, &mut fc.aim, &mut fc.fire, &mut mv.dir, &mut mv.boost, &mut mv.jump);
+        let q = if mv.boost || self.mode != Mode::Idle { 1.0 } else { self.ffa_quiet(obs) };
+        act.move_ = Some([mv.dir[0] * q, mv.dir[1] * q]);
         act.boost = Some(mv.boost);
         act.jump = Some(mv.jump);
         act.aim = Some(fc.aim);
         act.fire = Some(fc.fire);
         act.reload = Some(fc.reload);
-        if self.p.halt_after >= 0.0 && obs.t >= self.p.halt_after {
+        if (self.p.halt_after >= 0.0 && obs.t >= self.p.halt_after) || self.order.halted {
             act.move_ = Some([0.0, 0.0]);
             act.boost = Some(false);
             act.jump = Some(false);
@@ -203,6 +317,7 @@ impl Brain {
             act.drop = None;
         }
         sanitize(&mut act, &obs.me.stats);
+        self.audit_step(obs, world, &snap, &act);
         act
     }
 
@@ -244,10 +359,13 @@ impl Brain {
 
     /// None: not wanted. Some(None): goes into an empty slot. Some(Some(s)): swap out slot s.
     pub(crate) fn want(&self, me: &SelfObs, kind: WeaponKind) -> Option<Option<i64>> {
+        if kind == WeaponKind::Mortar && self.sf_no_mortar() {
+            return None;
+        }
         if kind == WeaponKind::Unknown || me.weapons.iter().flatten().any(|w| w.kind == kind) {
             return None;
         }
-        if me.weapons.iter().any(Option::is_none) {
+        if me.weapons.iter().any(|w| w.is_none()) {
             return Some(None);
         }
         let mut worst: Option<(f64, usize)> = None;
@@ -257,7 +375,7 @@ impl Brain {
                 continue;
             }
             let pv = self.pref_of(w.kind);
-            if worst.is_none_or(|x| pv < x.0) {
+            if worst.map_or(true, |x| pv < x.0) {
                 worst = Some((pv, i));
             }
         }
@@ -270,7 +388,7 @@ impl Brain {
     fn loot_action(&mut self, obs: &Obs, act: &mut Action) {
         let me = &obs.me;
         let reach = (self.cfg.loot.pickup_radius - 0.3).max(0.5);
-        let mut best: Option<(f64, i64, Option<i64>)> = None;
+        let mut best: Option<(f64, i64, Option<i64>, WeaponKind)> = None;
         for pk in &obs.pickups {
             if dist2(pk.pos, me.pos) > reach || (pk.pos[2] - me.pos[2]).abs() > 3.7 {
                 continue;
@@ -280,12 +398,15 @@ impl Brain {
             }
             if let Some(slot) = self.want(me, pk.kind) {
                 let v = self.pref_of(pk.kind);
-                if best.is_none_or(|b| v > b.0) {
-                    best = Some((v, pk.id, slot));
+                if best.map_or(true, |b| v > b.0) {
+                    best = Some((v, pk.id, slot, pk.kind));
                 }
             }
         }
-        if let Some((_, id, slot)) = best {
+        if let Some((_, id, slot, kind)) = best {
+            if !self.fz_take_ok(obs, kind, slot.is_some()) {
+                return;
+            }
             act.take = Some(id);
             act.drop = slot;
         }
@@ -316,5 +437,18 @@ fn sanitize(act: &mut Action, st: &MechCfg) {
 impl Pilot for Brain {
     fn act(&mut self, obs: &Obs) -> Action {
         Brain::act(self, obs, &Budget::unlimited())
+    }
+}
+
+#[derive(Default, Clone)]
+pub(crate) struct FireSnap {
+    pub aim: V2,
+    pub fire: [bool; 2],
+    pub tfeet: Option<V3>,
+}
+
+impl FireSnap {
+    fn of(fc: &aim::FireOut) -> Self {
+        FireSnap { aim: fc.aim, fire: fc.fire, tfeet: fc.target.as_ref().filter(|t| !t.fixed).map(|t| t.feet) }
     }
 }
