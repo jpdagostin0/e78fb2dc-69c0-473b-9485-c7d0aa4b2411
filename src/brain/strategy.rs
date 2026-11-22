@@ -178,17 +178,29 @@ impl Brain {
             Goal::Nav { pos: g, .. } if self.mode == Mode::Loot && self.goal_id >= 0 => {
                 let d = dist(pos, g);
                 // A cube is collected on contact, so standing still on the way to one means it cannot be reached.
-                let parked = me.vel[0].hypot(me.vel[1]) < 0.5 && self.mem.cubes.iter().any(|c| c.id == self.goal_id);
-                if !parked || self.loot_best.0 != self.goal_id {
-                    self.loot_parked = t;
+                let still = me.vel[0].hypot(me.vel[1]) < 0.5 && self.mem.cubes.iter().any(|c| c.id == self.goal_id);
+                if !still || self.parked.0 != self.goal_id {
+                    self.parked = (self.goal_id, t);
                 }
                 if self.loot_best.0 != self.goal_id || d < self.loot_best.1 - 0.5 {
                     self.loot_best = (self.goal_id, d, t);
-                } else if t - self.loot_best.2 > p.loot_stall_s || t - self.loot_parked > p.loot_parked_s {
+                } else if t - self.loot_best.2 > p.loot_stall_s || t - self.parked.1 > p.loot_parked_s {
                     self.mem.ban(self.goal_id, t + p.blacklist_s);
                 }
             }
-            _ => self.loot_best.0 = -1,
+            // A hunt goal is Nav only while the target is out of sight; standing still does not bring it into view.
+            Goal::Nav { .. } if self.mode == Mode::Hunt && self.goal_id >= 0 => {
+                self.loot_best.0 = -1;
+                if me.vel[0].hypot(me.vel[1]) >= 0.5 || self.parked.0 != self.goal_id {
+                    self.parked = (self.goal_id, t);
+                } else if t - self.parked.1 > p.hunt_parked_s {
+                    self.mem.ban(self.goal_id, t + p.blacklist_s);
+                }
+            }
+            _ => {
+                self.loot_best.0 = -1;
+                self.parked.0 = -1;
+            }
         }
 
         let mut n_att = 0;
@@ -592,7 +604,7 @@ impl Brain {
                 if best.as_ref().map_or(true, |b| s < b.0) {
                     let c = up(tr.pos, self.cfg.npc.height * 0.5);
                     let los = t - tr.last_seen < p.fresh_s && world.ray(muzzle, c).is_none();
-                    let g = if los { Goal::Range { pos: tr.pos, pref: p.range_npc } } else { Goal::Nav { pos: tr.pos, arrive: p.range_npc * 0.8 } };
+                    let g = if los { Goal::Range { pos: tr.pos, pref: p.range_npc } } else { Goal::Nav { pos: tr.pos, arrive: p.hunt_arrive } };
                     best = Some((s, Tgt::Npc(tr.id), g, tr.id));
                 }
             }
@@ -613,7 +625,7 @@ impl Brain {
                 if best.as_ref().map_or(true, |b| s < b.0) {
                     let c = up(it.pos, self.cfg.crates.height * 0.5);
                     let los = world.ray(muzzle, c).is_none();
-                    let g = if los && d < 120.0 { Goal::Range { pos: it.pos, pref: p.range_crate } } else { Goal::Nav { pos: it.pos, arrive: p.range_crate } };
+                    let g = if los && d < 120.0 { Goal::Range { pos: it.pos, pref: p.range_crate } } else { Goal::Nav { pos: it.pos, arrive: p.hunt_arrive } };
                     best = Some((s, Tgt::Crate(it.id), g, it.id));
                 }
             }

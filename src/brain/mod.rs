@@ -80,8 +80,8 @@ pub struct Brain {
     pub(crate) pursuit: (i64, f64),
     /// Loot goal id, closest distance reached so far, and when it was reached.
     pub(crate) loot_best: (i64, f64, f64),
-    /// Since when the bot has stood still on the way to a cube.
-    pub(crate) loot_parked: f64,
+    /// Goal id, and since when the bot has stood still on the way to it.
+    pub(crate) parked: (i64, f64),
     pub(crate) target: Tgt,
     pub(crate) allow_crates: bool,
     pub(crate) field: Option<(V3, Arc<nav::Field>, f64)>,
@@ -166,7 +166,7 @@ impl Brain {
             goal_id: -1,
             pursuit: (-1, 0.0),
             loot_best: (-1, 0.0, 0.0),
-            loot_parked: 0.0,
+            parked: (-1, 0.0),
             target: Tgt::None,
             allow_crates: false,
             field: None,
