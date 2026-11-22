@@ -277,6 +277,8 @@ pub struct Params {
     pub ready_spare_hp: f64,
     pub ready_safe_range: f64,
     pub prep_pos: f64,
+    /// Cost per zone radius of standing away from the next zone centre; negative prefers the edge.
+    pub prep_center: f64,
     pub sv_spot: f64,
     pub sv_memory_s: f64,
     pub sv_laser_mult: f64,
@@ -655,6 +657,7 @@ impl Default for Params {
             ready_spare_hp: 200.0,
             ready_safe_range: 45.0,
             prep_pos: 0.0,
+            prep_center: 0.15,
             sv_spot: 0.0,
             sv_memory_s: 4.0,
             sv_laser_mult: 1.5,

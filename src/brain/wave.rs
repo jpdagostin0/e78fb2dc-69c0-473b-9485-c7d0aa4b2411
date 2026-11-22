@@ -126,7 +126,7 @@ impl Brain {
             }
             let ex = self.exposure(world, q, h);
             let dz = dist2v(q, z.next_center) / z.next_radius.max(1.0);
-            let s = ex + 0.15 * dz + 0.0015 * dist(q, me.pos);
+            let s = ex + self.p.prep_center * dz + 0.0015 * dist(q, me.pos);
             if self.wave.prep.map_or(true, |(_, ps)| s < ps - 0.03) {
                 self.wave.prep = Some((q, s));
             }
