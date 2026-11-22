@@ -132,7 +132,7 @@ fn recorded_stream() {
     let text = std::fs::read_to_string(path).expect("stream");
     let lines: Vec<String> = text.lines().map(|s| s.to_string()).collect();
     let cfg = crate::proto::Config::default();
-    let empty = Arc::new(Shared { world: crate::world::World::empty(), nav: crate::nav::Nav::build(&crate::world::World::empty(), &cfg.mech) });
+    let empty = Arc::new(Shared { world: crate::world::World::empty(), nav: crate::nav::Nav::build(&crate::world::World::empty(), &cfg.mech), big: Vec::new() });
     let n = run_stream(empty, &lines);
     assert!(n >= 300, "only {n} observations");
     if let Ok(dir) = std::env::var("MECH_MAP") {
@@ -147,7 +147,7 @@ fn recorded_stream() {
 fn degenerate_obs() {
     let hello = crate::proto::Hello::default();
     let cfg = &hello.config;
-    let shared = Arc::new(Shared { world: crate::world::World::empty(), nav: crate::nav::Nav::build(&crate::world::World::empty(), &cfg.mech) });
+    let shared = Arc::new(Shared { world: crate::world::World::empty(), nav: crate::nav::Nav::build(&crate::world::World::empty(), &cfg.mech), big: Vec::new() });
     let mut b = Brain::with_params(&hello, shared, Params::default());
     let o: crate::proto::Obs = serde_json::from_str("{}").unwrap();
     let a = b.act(&o, &Budget::unlimited());
