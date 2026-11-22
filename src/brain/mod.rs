@@ -62,6 +62,8 @@ pub(crate) enum Tgt {
 pub struct Brain {
     pub(crate) cfg: proto::Config,
     pub(crate) p: Arc<Params>,
+    /// Parameters swapped in once a free-for-all is detected; built at startup so a bad `ffa_set` fails the check, not a match.
+    pub(crate) p_ffa: Arc<Params>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) rng: Rng,
     pub(crate) mem: Memory,
@@ -141,6 +143,7 @@ impl Brain {
         };
         Brain {
             cfg: hello.config.clone(),
+            p_ffa: Arc::new(params.ffa_variant()),
             p: Arc::new(params),
             shared,
             rng,
@@ -242,7 +245,7 @@ impl Brain {
         let ffa_was = self.ffa.on;
         self.ffa.update(obs, &self.mem.tracks, self.p.ffa_on > 0.5);
         if self.ffa.on && !ffa_was {
-            self.p = Arc::new(self.p.ffa_variant());
+            self.p = self.p_ffa.clone();
         }
         self.order.update(obs);
         self.tele_update(obs);
