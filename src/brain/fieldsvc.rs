@@ -24,6 +24,8 @@ pub(crate) struct FieldSvc {
     pub nav: Option<Pend>,
     pub sq: Option<Pend>,
     pub late: u64,
+    /// Size multiplier of the nav graph the fields are built on.
+    scale: f64,
 }
 
 impl FieldSvc {
@@ -41,6 +43,16 @@ impl FieldSvc {
             }
         }
         self.tx.clone()
+    }
+
+    /// Builds on the nav graph for `scale` from now on; pending fields belong to the previous graph.
+    pub fn retarget(&mut self, scale: f64) {
+        self.scale = scale;
+        for p in [&mut self.zone, &mut self.nav, &mut self.sq] {
+            if let Some(q) = p.take() {
+                q.cancel.store(true, Ordering::Relaxed);
+            }
+        }
     }
 }
 
@@ -76,8 +88,9 @@ pub(crate) fn request(
     keep_ms: f64,
     build: impl FnOnce(&Nav) -> Field + Send + 'static,
 ) -> Option<Field> {
+    let scale = svc.scale;
     if budget.is_unlimited() {
-        return Some(build(&shared.nav));
+        return Some(build(shared.nav_at(scale)));
     }
     let tx = svc.sender();
     let p = match which {
@@ -98,7 +111,7 @@ pub(crate) fn request(
             if c2.load(Ordering::Relaxed) {
                 return;
             }
-            let f = build(&sh.nav);
+            let f = build(sh.nav_at(scale));
             let _ = rtx.send(f);
         });
         let sent = match tx {

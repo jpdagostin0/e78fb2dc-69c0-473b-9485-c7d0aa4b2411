@@ -94,7 +94,7 @@ impl Brain {
         }
         let main = thr.iter().max_by(|a, b| a.held.total_cmp(&b.held)).map(|x| (x.id, x.tp)).unwrap();
         let shared = self.shared.clone();
-        let nav = &shared.nav;
+        let nav = shared.nav_at(self.nav_scale);
         let speed = me.stats.boost_speed.max(me.stats.walk_speed).max(1.0);
         let r = (p.bu_reach_s * speed).min(p.bu_r).max(2.0);
         let (cnx, cny, o) = nav.grid();

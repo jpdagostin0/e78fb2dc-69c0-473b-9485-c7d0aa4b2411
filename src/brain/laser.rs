@@ -492,7 +492,7 @@ impl Brain {
             return;
         }
         let shared = self.shared.clone();
-        let nav = &shared.nav;
+        let nav = shared.nav_at(self.nav_scale);
         let speed = me.stats.boost_speed.max(me.stats.walk_speed).max(1.0);
         let r = (left * speed + 1.0).min(p.lz_cl_r);
         let (cnx, cny, o) = nav.grid();
