@@ -78,6 +78,8 @@ pub struct Brain {
     pub(crate) goal: Goal,
     pub(crate) goal_id: i64,
     pub(crate) pursuit: (i64, f64),
+    /// Loot goal id, closest distance reached so far, and when it was reached.
+    pub(crate) loot_best: (i64, f64, f64),
     pub(crate) target: Tgt,
     pub(crate) allow_crates: bool,
     pub(crate) field: Option<(V3, Arc<nav::Field>, f64)>,
@@ -160,6 +162,7 @@ impl Brain {
             goal: Goal::None,
             goal_id: -1,
             pursuit: (-1, 0.0),
+            loot_best: (-1, 0.0, 0.0),
             target: Tgt::None,
             allow_crates: false,
             field: None,

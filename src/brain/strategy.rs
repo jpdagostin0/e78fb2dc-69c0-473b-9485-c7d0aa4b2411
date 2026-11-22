@@ -173,6 +173,19 @@ impl Brain {
             }
         }
 
+        // An item the bot has stopped closing on (on a roof, behind a wall) is not worth standing next to.
+        match self.goal {
+            Goal::Nav { pos: g, .. } if self.mode == Mode::Loot && self.goal_id >= 0 => {
+                let d = dist(pos, g);
+                if self.loot_best.0 != self.goal_id || d < self.loot_best.1 - 0.5 {
+                    self.loot_best = (self.goal_id, d, t);
+                } else if t - self.loot_best.2 > p.loot_stall_s {
+                    self.mem.ban(self.goal_id, t + p.blacklist_s);
+                }
+            }
+            _ => self.loot_best.0 = -1,
+        }
+
         let mut n_att = 0;
         let mut near_mech = f64::INFINITY;
         for tr in &self.mem.tracks {

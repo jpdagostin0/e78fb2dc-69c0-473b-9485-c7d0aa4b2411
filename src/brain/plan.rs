@@ -358,6 +358,15 @@ impl Brain {
                     }
                 }
             }
+            // The field measures to the node nearest the goal, which can sit metres short of it.
+            // Once that node is reached, walk the rest in a straight line.
+            let direct = dist2(pos, g);
+            if direct > a && direct < 12.0 && (g[2] - pos[2]).abs() < 4.0 && d0.is_some_and(|d| d <= direct + 3.0) {
+                d0 = Some(direct);
+                navdir = Some(unit2(g[0] - pos[0], g[1] - pos[1]));
+                nav_wants = true;
+                fld = None;
+            }
             if d0.is_none() {
                 d0 = Some(dist2(pos, g));
             }
