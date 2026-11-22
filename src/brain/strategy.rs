@@ -167,9 +167,14 @@ impl Brain {
         match self.goal {
             Goal::Nav { pos: g, .. } if self.mode == Mode::Loot && self.goal_id >= 0 => {
                 let d = dist(pos, g);
+                // A cube is collected on contact, so standing still on the way to one means it cannot be reached.
+                let parked = me.vel[0].hypot(me.vel[1]) < 0.5 && self.mem.cubes.iter().any(|c| c.id == self.goal_id);
+                if !parked || self.loot_best.0 != self.goal_id {
+                    self.loot_parked = t;
+                }
                 if self.loot_best.0 != self.goal_id || d < self.loot_best.1 - 0.5 {
                     self.loot_best = (self.goal_id, d, t);
-                } else if t - self.loot_best.2 > p.loot_stall_s {
+                } else if t - self.loot_best.2 > p.loot_stall_s || t - self.loot_parked > p.loot_parked_s {
                     self.mem.ban(self.goal_id, t + p.blacklist_s);
                 }
             }
