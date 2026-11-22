@@ -81,7 +81,7 @@ impl Brain {
 
     pub(crate) fn sf_hold(&self, obs: &Obs, tr: &Track) -> bool {
         let p = &self.p;
-        if p.sf_nofirst < 0.5 || tr.kind != ActorKind::Mech || Self::sf_has_laser(obs) {
+        if p.sf_nofirst < 0.5 || tr.kind != ActorKind::Mech || (p.sf_nf_laser >= 0.5 && Self::sf_has_laser(obs)) {
             return false;
         }
         let t = obs.t;
