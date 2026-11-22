@@ -272,7 +272,8 @@ impl Brain {
         self.laser_post(obs, world, &mut fc, &mut mv);
         self.loot_action(obs, &mut act);
         self.sf_drop(obs, &mut act);
-        let q = if mv.boost || self.mode != Mode::Idle { 1.0 } else { self.ffa_quiet(obs) };
+        let creep = self.p.ffa_creep >= 0.5 && matches!(self.mode, Mode::Loot | Mode::Hunt | Mode::Drop);
+        let q = if mv.boost || (self.mode != Mode::Idle && !creep) { 1.0 } else { self.ffa_quiet(obs) };
         act.move_ = Some([mv.dir[0] * q, mv.dir[1] * q]);
         act.boost = Some(mv.boost);
         act.jump = Some(mv.jump);

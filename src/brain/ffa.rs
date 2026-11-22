@@ -197,7 +197,7 @@ impl Brain {
         if self.mem.tracks.iter().any(|tr| tr.kind == ActorKind::Mech && t - tr.last_seen < 1.0) {
             return 1.0;
         }
-        let heard = self.mem.sounds.iter().any(|s| t - s.t < 4.0 && s.kind == "step");
+        let heard = self.p.ffa_creep >= 0.5 || self.mem.sounds.iter().any(|s| t - s.t < 4.0 && s.kind == "step");
         if !heard {
             return 1.0;
         }

@@ -32,6 +32,8 @@ pub struct Params {
     pub ffa_vulture_hp: f64,
     pub ffa_end_bonus: f64,
     pub ffa_early_quiet_range: f64,
+    /// In a free-for-all, stay under the footstep speed whenever no mech is in view, also while looting or hunting.
+    pub ffa_creep: f64,
     /// Overrides applied on top of these parameters once a free-for-all is detected.
     pub ffa_set: serde_json::Map<String, serde_json::Value>,
     // planner
@@ -390,6 +392,7 @@ impl Default for Params {
             ffa_vulture_hp: 0.50,
             ffa_end_bonus: 0.0,
             ffa_early_quiet_range: 0.0,
+            ffa_creep: 0.0,
             ffa_set: serde_json::Map::new(),
             horizon_steps: 8.0,
             n_dirs: 16.0,
