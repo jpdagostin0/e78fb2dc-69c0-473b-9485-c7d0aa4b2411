@@ -312,9 +312,6 @@ impl Brain {
             arrive = a;
             let calm = self.roof_jet || (t - self.mem.last_damage_t > 3.0 && !matches!(self.mode, Mode::Fight | Mode::Retreat));
             let jet_e = if calm { me.max_energy * 0.8 } else { -1.0 };
-            if let Some((k, tk, f)) = super::fieldsvc::poll(&mut self.fsvc.nav) {
-                self.field = Some(([k[0], k[1], k[2]], std::sync::Arc::new(f), tk));
-            }
             let need = match &self.field {
                 Some((fg, f, tb)) => {
                     let moved = dist(*fg, g);
@@ -325,11 +322,7 @@ impl Brain {
             if need && budget.remaining_ms() > p.field_min_budget_ms && (self.field.is_none() || self.spent_ms() < 8.0) {
                 let sg = nav.snap(g).filter(|q| q.iter().all(|x| x.is_finite())).unwrap_or(g);
                 let lim = dist2(pos, sg) * 2.0 + 120.0;
-                let shared = self.shared.clone();
-                let tol = p.field_regoal.max(0.0);
-                if let Some(f) = super::fieldsvc::request(&mut self.fsvc, 1, &shared, [g[0], g[1], g[2], jet_e], tol, t, budget, 10.0, move |nav| nav.field_limited(&[(sg, 0.0)], jet_e, lim)) {
-                    self.field = Some((g, std::sync::Arc::new(f), t));
-                }
+                self.field = Some((g, std::sync::Arc::new(nav.field_limited(&[(sg, 0.0)], jet_e, lim)), t));
             }
             if let Some((fg, f, _)) = &self.field {
                 let stale = dist(*fg, g);

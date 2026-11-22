@@ -23,14 +23,6 @@ impl Ffa {
         Ffa { seed, ..Default::default() }
     }
 
-    pub fn kills(&self) -> i64 {
-        self.kills
-    }
-
-    pub fn our_hit_t(&self, id: i64) -> f64 {
-        self.our_hits.iter().find(|x| x.0 == id).map_or(-1e9, |x| x.1)
-    }
-
     pub fn foreign_t(&self, id: i64) -> f64 {
         self.foreign.iter().find(|x| x.0 == id).map_or(-1e9, |x| x.1)
     }
@@ -54,7 +46,7 @@ impl Ffa {
         }
     }
 
-    pub fn update(&mut self, obs: &Obs, tracks: &[Track], enabled: bool, marks: bool) {
+    pub fn update(&mut self, obs: &Obs, tracks: &[Track], enabled: bool) {
         let t = obs.t;
         let me = &obs.me;
         if self.alive0 <= 0 {
@@ -76,11 +68,11 @@ impl Ffa {
         if self.our_hits.len() > 64 {
             self.our_hits.remove(0);
         }
-        if !enabled && !marks {
+        if !enabled {
             return;
         }
         let deaths = self.alive0 - obs.alive;
-        if enabled && t < 75.0 && deaths >= self.kills + 2 {
+        if t < 75.0 && deaths >= self.kills + 2 {
             self.set(t, 1);
         }
         let is_npc = |id: i64| tracks.iter().any(|tr| tr.id == id && tr.kind == ActorKind::Npc) || obs.mechs.iter().any(|m| m.id == id && m.kind == ActorKind::Npc);
@@ -133,7 +125,7 @@ impl Ffa {
         if self.seen_hp.len() > 32 {
             self.seen_hp.remove(0);
         }
-        if enabled && self.sig >= 3 {
+        if self.sig >= 3 {
             self.set(t, 2);
         }
     }
@@ -141,7 +133,7 @@ impl Ffa {
 
 impl Brain {
     pub(crate) fn ffa_passive(&self, obs: &Obs) -> bool {
-        self.p.ffa_on > 0.5 && self.ffa.on && (obs.alive as f64) > self.p.ffa_fair_alive && obs.t < self.p.ffa_end_t
+        self.ffa.on && (obs.alive as f64) > self.p.ffa_fair_alive && obs.t < self.p.ffa_end_t
     }
 
     pub(crate) fn ffa_end_rival(&self, obs: &Obs, tr: &Track) -> bool {

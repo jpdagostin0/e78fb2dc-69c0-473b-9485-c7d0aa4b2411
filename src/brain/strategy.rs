@@ -53,9 +53,6 @@ impl Brain {
 
     fn ensure_zone_field(&mut self, obs: &Obs, world: &World, nav: &Nav) {
         let z = &obs.zone;
-        if let Some((k, _, f)) = super::fieldsvc::poll(&mut self.fsvc.zone) {
-            self.zone_field = Some(([k[0], k[1]], k[2], std::sync::Arc::new(f)));
-        }
         if let Some((c, r, _)) = &self.zone_field {
             if (c[0] - z.next_center[0]).hypot(c[1] - z.next_center[1]) < 0.5 && (r - z.next_radius).abs() < 0.5 {
                 return;
@@ -84,15 +81,8 @@ impl Brain {
             }
         }
         let jet = if safe_r < 8.0 { obs.me.max_energy * 0.8 } else { -1.0 };
-        let _ = nav;
-        let key = [c[0], c[1], z.next_radius, jet];
-        let budget = self.budget;
-        let shared = self.shared.clone();
-        let got = super::fieldsvc::request(&mut self.fsvc, 0, &shared, key, 0.0, obs.t, &budget, 14.0, move |nav| nav.field_multi(&seeds, jet));
-        match got {
-            Some(f) => self.zone_field = Some((c, z.next_radius, std::sync::Arc::new(f))),
-            None => self.zone_field = None,
-        }
+        let f = nav.field_multi(&seeds, jet);
+        self.zone_field = Some((c, z.next_radius, std::sync::Arc::new(f)));
     }
 
     pub(crate) fn zone_info(&mut self, obs: &Obs, world: &World, nav: &Nav) -> ZoneInfo {
@@ -218,20 +208,10 @@ impl Brain {
         if !want_retreat && (self.sq_gate(obs, tgt.as_ref()) || regen && tgt.is_none()) {
             want_retreat = true;
         }
-        if !want_retreat && self.fz_retreat(obs, world, tgt.as_ref()) {
-            want_retreat = true;
-        }
-        if self.fz3_retreat(obs, tgt.as_ref()) {
-            want_retreat = true;
-        }
-        if !want_retreat && self.mx_two(obs, world, tgt.as_ref()) {
-            want_retreat = true;
-        }
         let avoid = !want_retreat && tgt.is_none() && self.sq_avoid(obs);
         let loot = self.choose_loot(obs, &zi);
         let harvest = if held { None } else { self.harvest(obs, &zi, n_att, near_mech) };
         let gearg = if held { None } else if want_retreat || avoid { self.gear_grab(obs, &zi) } else { self.gear_goal(obs, &zi, tgt.as_ref()).or_else(|| if p.gear_grab_always > 0.5 { self.gear_grab(obs, &zi) } else { None }) };
-        let (gearg, harvest) = if self.tk_no_detour() { (gearg.filter(|g| dist(g.1, pos) < p.sk_detour), harvest.filter(|g| dist(g.1, pos) < p.sk_detour)) } else { (gearg, harvest) };
         let farm = !held && self.gear_farm_mode(obs, tgt.as_ref());
         let gear_drop = self.gear_drop_ok(obs, tgt.as_ref());
         let hunt_near = if self.gear_on() { self.gear_near_real(obs) } else { near_mech };
@@ -240,9 +220,6 @@ impl Brain {
             self.econ.resting = false;
         }
         let drop = self.choose_drop(obs, &zi).filter(|_| !held || near_mem > 100.0);
-        let vdrop = self.dp_pick(obs, drop, tgt.as_ref(), want_retreat, hpf);
-        let near_item = |g: &Option<(i64, V3)>| g.map_or(false, |x| dist(x.1, pos) < p.sk_detour);
-        let vseek = if tgt.is_none() && !want_retreat && !avoid && !held && !near_item(&gearg) && !near_item(&harvest) { self.seek_goal(obs, &zi) } else { self.vx.seeking = false; None };
         let z = &obs.zone;
         let endgame = held && z.next_radius <= 0.5 && z.shrink_end - t < 40.0;
         let mut mode;
@@ -259,24 +236,6 @@ impl Brain {
         } else if zi.urgent {
             mode = Mode::Zone;
             goal = Goal::Field { center: obs.zone.next_center, arrive: 1.5 };
-        } else if self.vx.regroup || self.vx.kite {
-            mode = Mode::Retreat;
-            goal = if self.vx.kite { self.kite_goal(obs, world, nav, &zi) } else { Goal::None };
-            if matches!(goal, Goal::None) {
-                goal = self.cover_goal(obs, world, nav, &zi);
-            }
-            if self.vx.regroup {
-                target = Tgt::None;
-            }
-        } else if let Some(d) = vdrop {
-            mode = Mode::Drop;
-            goal = Goal::Nav { pos: d.0, arrive: (d.1 * 0.3).max(1.0) };
-        } else if let Some((id, q)) = vseek {
-            mode = Mode::Hunt;
-            goal = Goal::Nav { pos: q, arrive: 15.0 };
-            if id >= 0 {
-                target = Tgt::Mech(id);
-            }
         } else if let Some((id, gp)) = gearg.filter(|_| want_retreat || avoid) {
             mode = Mode::Loot;
             goal = Goal::Nav { pos: gp, arrive: 1.0 };
@@ -315,8 +274,6 @@ impl Brain {
                 self.mem.ban(tr.id, t + 8.0);
             }
             let pref = self.gear_range(obs, tr, self.pref_range(obs, tr, hpf));
-            let pref = if p.tk_on >= 0.5 { pref.min(p.tk_range) } else { pref };
-            let pref = self.fz_pref(obs, tr, pref);
             let g0 = if los { Goal::Range { pos: tp, pref } } else { Goal::Nav { pos: tp, arrive: (pref * 0.5).max(15.0) } };
             if self.p.sv_spot > 0.0 {
                 self.mode = Mode::Fight;
@@ -354,23 +311,6 @@ impl Brain {
         if goal_id != self.goal_id {
             self.pursuit = (goal_id, t);
         }
-        if mode != Mode::Hunt {
-            self.vx.seeking = false;
-        }
-        let (mode, goal, goal_id) = match if matches!(mode, Mode::Zone) { None } else { self.fz_force_goal(obs, world, nav) } {
-            Some(g) => {
-                self.allow_crates = false;
-                (Mode::Retreat, g, -1)
-            }
-            None => (mode, goal, goal_id),
-        };
-        if self.fz.forced && self.fz.lines >= 1 && p.fz_r_swap > 0.5 {
-            self.allow_crates = false;
-        }
-        let (mode, goal, goal_id, target) = match self.fz3_hold(obs, world, nav, mode, target) {
-            Some((m, g, tg)) => (m, g, -1, tg),
-            None => (mode, goal, goal_id, target),
-        };
         self.mode = mode;
         self.goal = goal;
         self.goal_id = goal_id;
@@ -389,7 +329,7 @@ impl Brain {
             if tr.kind != ActorKind::Mech || t - tr.last_seen > p.target_memory_s {
                 continue;
             }
-            if gate && self.spare_tr(tr, t, pos) {
+            if gate && self.spare(tr.hp, tr.max_hp) {
                 continue;
             }
             let tp = tr.pos_at(t);
@@ -404,7 +344,7 @@ impl Brain {
             if d > p.engage_range && !attacker {
                 continue;
             }
-            if !self.ffa_allow(obs, tr, attacker, d) || !self.mx_allow(obs, tr, attacker) || !self.fz_allow(obs, None, tr, attacker) {
+            if !self.ffa_allow(obs, tr, attacker, d) {
                 continue;
             }
             if d > 60.0 {
@@ -426,10 +366,6 @@ impl Brain {
             if self.ffa_end_rival(obs, tr) {
                 s += p.ffa_end_bonus;
             }
-            s += self.tk_bonus(tr);
-            s += self.mx_bonus(obs, tr);
-            s += self.fz_bonus(obs, tr);
-            s += self.fz3_bonus(obs, tr);
             if t - tr.last_seen < p.fresh_s {
                 s += 30.0;
             }

@@ -27,7 +27,7 @@ impl Brain {
     }
 
     fn wave_armed(&self) -> bool {
-        self.p.ready_kill >= 1.0 && (self.wave.kills as f64) >= self.p.ready_kill - 1.0 && (self.p.ready_only < 0.5 || (self.wave.kills as f64) < self.p.ready_kill)
+        self.p.ready_kill >= 1.0 && (self.wave.kills as f64) >= self.p.ready_kill - 1.0
     }
 
     pub(crate) fn ready(&self, obs: &Obs) -> bool {
@@ -37,9 +37,6 @@ impl Brain {
             return true;
         }
         if me.cubes < p.ready_cubes.min(self.cfg.cubes.stat_cap.max(1.0)) || frac(me.hp, me.max_hp) < p.ready_hp {
-            return false;
-        }
-        if p.ready_laser > 0.5 && !me.weapons.iter().flatten().any(|w| w.kind == crate::proto::WeaponKind::Laser) {
             return false;
         }
         if p.ready_second > 0.0 && me.weapons.iter().any(|w| w.is_none()) {
