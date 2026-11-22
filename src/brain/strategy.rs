@@ -389,7 +389,7 @@ impl Brain {
                     s -= 15.0;
                 }
                 if best.as_ref().is_none_or(|b| s < b.0) {
-                    best = Some((s, LootPick { id: it.id, pos: it.pos, quick: d < p.loot_quick * 0.5 }));
+                    best = Some((s, LootPick { id: it.id, pos: it.pos, quick: d < p.cube_quick }));
                 }
             }
         }
