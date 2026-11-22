@@ -125,7 +125,7 @@ impl Ffa {
         if self.seen_hp.len() > 32 {
             self.seen_hp.remove(0);
         }
-        if self.sig >= 3 {
+        if self.sig >= 3 && t < 90.0 {
             self.set(t, 2);
         }
     }

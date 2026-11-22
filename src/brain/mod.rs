@@ -239,7 +239,11 @@ impl Brain {
             self.cad.update(obs, self.p.cad_period, self.p.cad_snap);
         }
         self.wave_update(obs, world, nav);
+        let ffa_was = self.ffa.on;
         self.ffa.update(obs, &self.mem.tracks, self.p.ffa_on > 0.5);
+        if self.ffa.on && !ffa_was {
+            self.p = Arc::new(self.p.ffa_variant());
+        }
         self.order.update(obs);
         self.tele_update(obs);
         if self.p.halt_multi >= 1.0 && !self.order.halted && self.order.on_us(obs.t) as f64 >= self.p.halt_multi {
