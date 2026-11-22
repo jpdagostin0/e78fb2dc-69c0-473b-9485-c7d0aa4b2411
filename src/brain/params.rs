@@ -36,6 +36,8 @@ pub struct Params {
     pub ffa_creep: f64,
     /// Overrides applied on top of these parameters once a free-for-all is detected.
     pub ffa_set: serde_json::Map<String, serde_json::Value>,
+    /// Further overrides applied only when the death count confirms the free-for-all.
+    pub ffa_sure_set: serde_json::Map<String, serde_json::Value>,
     // planner
     pub horizon_steps: f64,
     pub n_dirs: f64,
@@ -396,6 +398,7 @@ impl Default for Params {
             ffa_early_quiet_range: 0.0,
             ffa_creep: 0.0,
             ffa_set: serde_json::Map::new(),
+            ffa_sure_set: serde_json::Map::new(),
             horizon_steps: 8.0,
             n_dirs: 16.0,
             n_boost_dirs: 8.0,
@@ -744,11 +747,15 @@ impl Default for Params {
 }
 
 impl Params {
-    /// These parameters with the `ffa_set` overrides applied.
-    pub fn ffa_variant(&self) -> Params {
+    /// These parameters with the `ffa_set` overrides applied, then `ffa_sure_set` when `sure`.
+    pub fn ffa_variant(&self, sure: bool) -> Params {
         let mut all = serde_json::to_value(self).expect("params serialize");
-        all.as_object_mut().expect("params are a map").extend(self.ffa_set.clone());
-        serde_json::from_value(all).expect("ffa_set matches the parameter types")
+        let map = all.as_object_mut().expect("params are a map");
+        map.extend(self.ffa_set.clone());
+        if sure {
+            map.extend(self.ffa_sure_set.clone());
+        }
+        serde_json::from_value(all).expect("ffa overrides match the parameter types")
     }
 
     /// Defaults, overridden by the JSON file named in MECH_PARAMS when present.

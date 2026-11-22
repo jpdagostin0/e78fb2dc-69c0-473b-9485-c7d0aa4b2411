@@ -64,6 +64,7 @@ pub struct Brain {
     pub(crate) p: Arc<Params>,
     /// Parameters swapped in once a free-for-all is detected; built at startup so a bad `ffa_set` fails the check, not a match.
     pub(crate) p_ffa: Arc<Params>,
+    pub(crate) p_ffa_sure: Arc<Params>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) rng: Rng,
     pub(crate) mem: Memory,
@@ -143,7 +144,8 @@ impl Brain {
         };
         Brain {
             cfg: hello.config.clone(),
-            p_ffa: Arc::new(params.ffa_variant()),
+            p_ffa: Arc::new(params.ffa_variant(false)),
+            p_ffa_sure: Arc::new(params.ffa_variant(true)),
             p: Arc::new(params),
             shared,
             rng,
@@ -242,9 +244,11 @@ impl Brain {
             self.cad.update(obs, self.p.cad_period, self.p.cad_snap);
         }
         self.wave_update(obs, world, nav);
-        let ffa_was = self.ffa.on;
+        let ffa_was = (self.ffa.on, self.ffa.sure);
         self.ffa.update(obs, &self.mem.tracks, self.p.ffa_on > 0.5);
-        if self.ffa.on && !ffa_was {
+        if self.ffa.sure && !ffa_was.1 {
+            self.p = self.p_ffa_sure.clone();
+        } else if self.ffa.on && !ffa_was.0 {
             self.p = self.p_ffa.clone();
         }
         self.order.update(obs);

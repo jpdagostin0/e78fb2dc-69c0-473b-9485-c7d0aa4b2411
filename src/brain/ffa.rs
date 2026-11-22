@@ -6,6 +6,8 @@ use crate::proto::{ActorKind, Event, Obs};
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Ffa {
     pub on: bool,
+    /// Set only by the death count, which stray squad fire cannot trigger.
+    pub sure: bool,
     pub on_t: f64,
     pub why: u8,
     alive0: i64,
@@ -74,6 +76,7 @@ impl Ffa {
         let deaths = self.alive0 - obs.alive;
         if t < 75.0 && deaths >= self.kills + 2 {
             self.set(t, 1);
+            self.sure = true;
         }
         let is_npc = |id: i64| tracks.iter().any(|tr| tr.id == id && tr.kind == ActorKind::Npc) || obs.mechs.iter().any(|m| m.id == id && m.kind == ActorKind::Npc);
         for b in &obs.beams {
